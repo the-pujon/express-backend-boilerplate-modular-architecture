@@ -38,6 +38,9 @@ A production-ready Express.js backend boilerplate with TypeScript, featuring a m
 ### Directory Structure
 ```
 src/
+├── __tests__/        # Unit and integration tests
+│   ├── modules/        # Tests for individual modules
+│   └── setup.ts        # Jest setup file
 ├── app/
 │   ├── config/         # Environment and service configurations
 │   ├── errors/         # Custom error handlers and classes
@@ -48,17 +51,18 @@ src/
 │   ├── routes/         # API route definitions
 │   ├── shared/         # Shared utilities and constants
 │   └── utils/          # Common utility functions
-├── templates/          # Email templates
 ├── app.ts             # Express app configuration
 └── server.ts          # Server entry point
+
+templates/              # Email templates (at the root level)
 ```
 
 ## ⚙️ Configuration
 
 ### Environment Variables
-Create a `.env` file with the following variables:
+Create a `.env` file in the project root and populate it with the following variables:
 
-```env
+```bash
 # Server Configuration
 PORT=4000
 NODE_ENV=development
@@ -74,6 +78,7 @@ JWT_REFRESH_SECRET=your_refresh_secret
 JWT_REFRESH_EXPIRES_IN=7d
 JWT_PASSWORD_SECRET=your_password_secret
 JWT_PASSWORD_EXPIRES_IN=1h
+RESET_PASS_UI_LINK=your_reset_password_ui_link # Link to your frontend password reset page
 
 # Redis Configuration
 REDIS_URL=your_redis_url
@@ -104,49 +109,92 @@ IS_LIVE=false
 ## 🔧 Core Features
 
 ### 1. Authentication System
-- JWT-based authentication
-- Access and refresh token mechanism
-- Password reset functionality
-- Role-based access control
+- JWT-based authentication using `jsonwebtoken` for secure stateless sessions.
+- **Access and Refresh Tokens:**
+    - Access tokens for API authorization, sent as HTTP-only cookies.
+    - Refresh tokens for obtaining new access tokens, also sent as HTTP-only cookies.
+    - Both token types are additionally cached in Redis for enhanced security and control.
+- **Email Verification:**
+    - New users receive a time-limited verification code via email, stored in Redis.
+- **Password Reset:**
+    - Secure, time-limited token-based password reset via email, with tokens stored in Redis.
+- **Role-Based Access Control (RBAC):**
+    - Middleware (`auth.ts`) protects routes based on user roles (e.g., `superAdmin`, `admin`, `customer`).
+    - Defined role hierarchy for managing user permissions and role modifications.
+- **Additional Security Features:**
+    - Password hashing using `bcrypt`.
+    - Rate limiting for sensitive actions (signup, login, password reset) using Redis.
+    - Account locking mechanism after multiple failed login attempts.
+    - Configurable password strength validation.
+- **Logout:** Clears tokens from cookies and Redis.
 
 ### 2. Error Handling
-The boilerplate implements a robust error handling system:
+The boilerplate implements a robust error handling system via the `globalErrorHandler` middleware (`src/app/middlewares/globalErrorhandler.ts`). This middleware catches errors and sends a standardized JSON response.
 
+#### Custom Error Class (`src/app/errors/AppError.ts`)
+A custom error class `AppError` is used for application-specific errors:
 ```typescript
-// Custom error class
 class AppError extends Error {
-  statusCode: number;
-  status: string;
-  isOperational: boolean;
-}
+  public statusCode: number;
 
-// Error handlers for different scenarios
-- handleCastError: MongoDB cast errors
-- handleDuplicateError: Duplicate key errors
-- handleValidationError: Validation errors
-- handleZodError: Schema validation errors
-- handleMulterErrors: File upload errors
+  constructor(statusCode: number, message: string, stack = '') {
+    super(message);
+    this.statusCode = statusCode;
+
+    if (stack) {
+      this.stack = stack;
+    } else {
+      Error.captureStackTrace(this, this.constructor);
+    }
+  }
+}
 ```
 
+#### Specific Error Handlers
+The `globalErrorHandler` utilizes helper functions to process specific error types:
+- `handleCastError` (`src/app/errors/handleCastError.ts`): Formats MongoDB cast errors.
+- `handleDuplicateError` (`src/app/errors/handleDuplicateError.ts`): Formats MongoDB duplicate key errors.
+- `handleValidationError` (`src/app/errors/handleValidationError.ts`): Formats Mongoose schema validation errors.
+- `handleZodError` (`src/app/errors/handleZodError.ts`): Formats validation errors from `zod` schemas.
+- `handleMulterErrors` (`src/app/errors/handleMulterErrors.ts`): A middleware that converts `multer` specific errors into `AppError` instances.
+
+(Refer to "Implementation Guidelines > 3. Error Handling" for more details on how `AppError` is used and the structure of error responses.)
+
 ### 3. File Upload System
-- Cloudinary integration
-- Multer middleware
-- File type validation
-- Size restrictions
-- Automatic cleanup
+Handles file uploads (images, PDFs) with Cloudinary integration for storage.
+- **Cloudinary Integration:** Uses `cloudinary` and `multer-storage-cloudinary`. Files are uploaded to Cloudinary, with utilities for upload and deletion (`src/app/utils/cloudinary_file_upload.ts`, `src/app/utils/cloudinaryDelete.ts`).
+- **Multer Middleware:** Primarily uses `CloudinaryStorage` (configured in `src/app/utils/multerConfig.ts`) for direct streaming to Cloudinary. An alternative local disk storage setup (`src/app/middlewares/multerMiddleware.ts`) also exists, which might be used for specific scenarios.
+- **File Type Validation:** Enforced by Multer configurations, supporting various image types and PDFs. PDFs are uploaded as raw files; images can be transformed.
+- **Size Restrictions:** File size limits (e.g., 1MB) are enforced, handled by `src/app/errors/handleMulterErrors.ts`.
+- **Automatic Cleanup:** Temporary local files (if disk storage is used) are deleted post-upload. Cloudinary files can also be deleted.
+
+(See "Implementation Guidelines > 4. File Upload" for usage examples.)
 
 ### 4. Caching System
-- Redis-based caching
-- Token storage
-- Query result caching
-- Cache invalidation
+Utilizes Redis for efficient data caching, managed by helper functions in `src/app/utils/redis.utils.ts`.
+- **Redis Integration:** Powered by the `redis` library, configured via `src/app/config/redis.config.ts`.
+- **Key Caching Operations:** Includes `cacheData` (with TTL), `getCachedData`, `deleteCachedData` (pattern-based), and `clearAllCachedData`.
+- **Common Use Cases:** Token storage, query result caching, rate limiting data, temporary data (e.g., email verification codes, password reset tokens).
+- **Cache Invalidation:** Supports targeted deletion and full cache flushing.
+
+(Refer to "Implementation Guidelines > 5. Caching Implementation" for detailed usage.)
 
 ### 5. Email System
-- HTML email templates
-- Nodemailer integration
-- Templates for:
-  - Email verification
-  - Password reset
+Facilitates sending transactional emails using `nodemailer` and HTML templates.
+- **Nodemailer Integration:** Configured in `src/app/utils/sendEmail.ts` using SMTP credentials from environment variables. Supports secure transport (SSL/TLS).
+- **HTML Email Templates:** Located in `templates/` (root directory). A utility `getEmailTemplate` loads and populates templates with dynamic data.
+- **Key Use Cases:** Email verification codes, password reset links.
+
+(Refer to "Email System Implementation" for more details.)
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+- **Node.js**: Version `20.16.0` or later is recommended (as per `Dockerfile`). You can use [nvm](https://github.com/nvm-sh/nvm) to manage Node.js versions.
+- **npm**: Bundled with Node.js.
+- **MongoDB**: A running MongoDB instance. Ensure it's accessible and provide the connection URI in your `.env` file.
+- **Redis**: A running Redis instance. Ensure it's accessible and configure connection details in your `.env` file.
+- **Docker (Optional)**: For running the application in a containerized environment. See "Docker Deployment" section.
 
 ## 🛠️ Implementation Guidelines
 
@@ -181,8 +229,9 @@ router.post('/', validateRequest(YourValidation.createSchema), createItem);
 router.use(auth());
 
 // File upload middleware
+// Assuming 'upload' is your configured Multer instance (e.g., from src/app/utils/multerConfig.ts)
 router.post('/upload', 
-  multerMiddleware.single('file'),
+  upload.single('file'), // 'upload' is the variable holding the multer instance
   uploadController
 );
 
@@ -203,18 +252,47 @@ try {
 ```
 
 ### 4. File Upload
+Example using `multer` with `multer-storage-cloudinary` (setup similar to `src/app/utils/multerConfig.ts`):
+
 ```typescript
-// Configure multer
+import multer from 'multer';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import cloudinary from './path-to-your-cloudinary-config'; // Import your Cloudinary instance
+
+// Configure Cloudinary storage (example, actual config in `src/app/utils/multerConfig.ts`)
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary, // Your configured Cloudinary instance from `src/app/utils/cloudinary.ts`
+  params: {
+    folder: 'your-app-folder', // Example folder in Cloudinary
+    format: async (req: any, file: any) => 'png', // Or dynamically determine format like path.extname(file.originalname).substring(1)
+    public_id: (req: any, file: any) => file.originalname.split('.')[0] + '-' + Date.now(), // Example public_id
+  } as Record<string, unknown>,
+});
+
+// Configure multer instance
 const upload = multer({
-  storage: cloudinaryStorage,
+  storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB
+    fileSize: 1 * 1024 * 1024 // Example: 1MB limit (consistent with handleMulterErrors)
+  },
+  fileFilter: (req, file, cb) => {
+    // Add your file filter logic here (e.g., check mimetypes)
+    // Example:
+    // const allowedTypes = ['image/jpeg', 'image/png'];
+    // if (allowedTypes.includes(file.mimetype)) {
+    //   cb(null, true);
+    // } else {
+    //   cb(new Error('Invalid file type'));
+    // }
+    cb(null, true); // Basic accept all for example
   }
 });
 
-// Use in route
+// Use in a route
+// Assuming 'uploadController' handles the logic after file processing by multer
 router.post('/upload', upload.single('file'), uploadController);
 ```
+The `handleMulterErrors` middleware will catch size limit errors and other multer-specific issues.
 
 ### 5. Caching Implementation
 ```typescript
@@ -240,7 +318,7 @@ The Redis caching system provides the following utilities:
 1. **cacheData**
    - Caches data with a specified TTL (Time To Live)
    - Automatically serializes data to JSON
-   - Handles errors gracefully with logging
+   - Logs errors if caching operations fail
 
 2. **getCachedData**
    - Retrieves cached data by key
@@ -340,23 +418,62 @@ const paymentSession = await sslcommerz.initiatePayment({
 # Install dependencies
 npm install
 
-# Create .env file
-cp .env.example .env
+# Create .env file (if .env.example exists)
+# cp .env.example .env
 
 # Start development server
 npm run dev
 ```
 
-### 2. Building for Production
+### 2. Running Tests
+The project uses Jest for testing.
 ```bash
-npm run build
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Generate test coverage report
+npm run test:coverage
 ```
 
-### 3. Docker Deployment
+### 3. Building and Running for Production (Standalone)
+If you are not using Docker for production, you'll need to build the TypeScript code into JavaScript and then run the compiled output.
+
+1.  **Build the application:**
+    The `tsconfig.json` is configured to output compiled files to the `dist` directory.
+    ```bash
+    # Compile TypeScript to JavaScript
+    npx tsc
+    ```
+    You might want to add this as a `build` script in your `package.json` (if not already present):
+    ```json
+    {
+      "scripts": {
+        "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+        "test": "jest",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage",
+        "build": "tsc"
+      }
+    }
+    ```
+    If you add the script, you can then run `npm run build`.
+
+2.  **Run the built application:**
+    After a successful build, run the application using Node.js:
+    ```bash
+    # Set NODE_ENV to production for optimal performance and ensure .env is configured for production
+    NODE_ENV=production node dist/server.js
+    ```
+
+### 4. Docker Deployment
 ```bash
 # Build and run with Docker
 docker-compose up --build
 ```
+Note: The current `Dockerfile` is configured to run the application in development mode using `npm run dev`. For a production deployment, you would typically modify the `Dockerfile` to build the TypeScript source into JavaScript and run that with Node.js directly.
 
 ## 📝 Best Practices
 
