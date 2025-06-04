@@ -87,8 +87,10 @@ import { getCachedData } from "../utils/redis.utils";
 import config from "../config";
 import { User } from "../modules/Auth/auth.model";
 import catchAsync from "../utils/catchAsync";
+import { PERMISSIONS, ROLE_PERMISSIONS } from "../modules/Auth/auth.permissions";
+import { UserRole } from "../modules/Auth/auth.interface";
 
-export const auth = (...requiredRoles: ("admin" | "moderator" | "superAdmin" | "customer" | "seller")[]) => {
+export const auth = (...requiredPermissions: string[]) => {
   return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
     const token = req.cookies.accessToken;
 
@@ -112,7 +114,7 @@ export const auth = (...requiredRoles: ("admin" | "moderator" | "superAdmin" | "
 
     try {
       const decoded = jwt.verify(token, config.jwt_access_secret) as JwtPayload;
-      const { email, role } = decoded;
+      const { email, role } = decoded as { email: string; role: UserRole };
 
       const cachedToken = await getCachedData(
         `${config.redis_cache_key_prefix}:user:${email}:accessToken`
@@ -127,10 +129,16 @@ export const auth = (...requiredRoles: ("admin" | "moderator" | "superAdmin" | "
         throw new AppError(httpStatus.NOT_FOUND, "This user is not found!");
       }
 
-      if (requiredRoles.length && !requiredRoles.includes(role)) {
+      // Permission check
+      const userPermissions = ROLE_PERMISSIONS[role] || [];
+      const hasAllRequiredPermissions = requiredPermissions.every(permission =>
+        userPermissions.includes(permission as any) // Cast to any if PERMISSIONS type causes issues
+      );
+
+      if (!hasAllRequiredPermissions) {
         throw new AppError(
-          httpStatus.UNAUTHORIZED,
-          "You have no access"
+          httpStatus.FORBIDDEN,
+          "You do not have sufficient permissions for this action"
         );
       }
 

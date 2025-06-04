@@ -12,8 +12,10 @@ export interface IUser {
   name: string;
   email: string;
   phone: string;
-  password: string;
+  password?: string; // Made optional
   role: UserRole;
+  provider?: 'local' | 'google' | 'facebook' | string; // Added provider
+  providerId?: string | null; // Added providerId
   lastLogin: Date;
   isVerified: boolean;
   failedLoginAttempts?: number;

@@ -33,11 +33,16 @@ export const AUTH_CONFIG = {
 
   // Role hierarchy
   ROLE_HIERARCHY: {
-    [UserRole.SUPER_ADMIN]: 4,
-    [UserRole.ADMIN]: 3,
-    [UserRole.MODERATOR]: 2,
+    [UserRole.SUPER_ADMIN]: 5,
+    [UserRole.ADMIN]: 4,
+    [UserRole.MODERATOR]: 3,
+    [UserRole.SELLER]: 2,
     [UserRole.CUSTOMER]: 1,
   },
+
+  // JWT Expiry Times
+  ACCESS_TOKEN_EXPIRY: '1h',
+  REFRESH_TOKEN_EXPIRY: '7d',
 
   // Security settings
   PASSWORD_MIN_LENGTH: 8,

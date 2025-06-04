@@ -4,6 +4,7 @@ import validateRequest from '../../middlewares/validateRequest';
 import { AuthControllers } from './auth.controller';
 import { AuthValidation } from './auth.validation';
 import { auth } from '../../middlewares/auth';
+import { PERMISSIONS } from './auth.permissions';
 
 
 const router = express.Router();
@@ -24,7 +25,7 @@ router.post(
 );
 router.get(
   '/users',
-  auth('superAdmin', 'admin'),
+  auth(PERMISSIONS.MANAGE_USERS_VIEW),
   AuthControllers.getUsers,
 );
 router.post(
@@ -48,13 +49,13 @@ router.post(
 router.post("/refresh-token", AuthControllers.refreshTokenController);
 router.patch(
   '/change-role',
-  auth('admin', "superAdmin"),
+  auth(PERMISSIONS.MANAGE_USERS_EDIT_ROLE),
   AuthControllers.changeRole,
 );
 
 router.delete(
   '/delete-user/:id',
-  auth('superAdmin'),
+  auth(PERMISSIONS.MANAGE_USERS_DELETE),
   AuthControllers.deleteUser,
 );
 

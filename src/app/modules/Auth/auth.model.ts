@@ -32,9 +32,21 @@ const userSchema = new Schema<IUser>(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+      required: function() { return !(this as any).provider || (this as any).provider === 'local'; },
       select: false, // Don't include password in queries by default
       minlength: [AUTH_CONFIG.PASSWORD_MIN_LENGTH, `Password must be at least ${AUTH_CONFIG.PASSWORD_MIN_LENGTH} characters long`],
+    },
+    provider: {
+      type: String,
+      default: 'local',
+      enum: ['local', 'google', 'facebook'],
+    },
+    providerId: {
+      type: String,
+      sparse: true,
+      unique: true,
+      index: true,
+      default: null,
     },
     role: {
       type: String,
@@ -89,11 +101,12 @@ const userSchema = new Schema<IUser>(
 // Indexes for better query performance
 userSchema.index({ role: 1 });
 userSchema.index({ isVerified: 1 });
+userSchema.index({ provider: 1, providerId: 1 }, { unique: true, sparse: true });
 
 // Middleware to hash password before saving
 userSchema.pre('save', async function (next) {
-  // Only hash the password if it has been modified (or is new)
-  if (!this.isModified('password')) return next();
+  // Only hash the password if it has been modified (or is new) and provider is 'local'
+  if (!this.isModified('password') || this.provider !== 'local' || !this.password) return next();
 
   try {
     // Generate salt and hash password

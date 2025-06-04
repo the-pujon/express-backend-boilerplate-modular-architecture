@@ -23,7 +23,9 @@ export const createToken = (
 ): string => {
   const { isRefresh = false, expiresIn } = options;
   const secret = isRefresh ? config.jwt_refresh_secret : config.jwt_access_secret;
-  const defaultExpiry = isRefresh ? "7d" : "1h";
+  const defaultExpiry = isRefresh
+                          ? AUTH_CONFIG.REFRESH_TOKEN_EXPIRY
+                          : AUTH_CONFIG.ACCESS_TOKEN_EXPIRY;
 
   const signOptions: SignOptions = {
     expiresIn: expiresIn || defaultExpiry,
