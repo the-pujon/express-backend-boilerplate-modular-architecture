@@ -40,6 +40,8 @@ export interface IUserModel extends Model<IUser> {
 }
 
 export interface ITokenPayload {
+  sub: string;
+  sessionId?: string;
   email: string;
   role: UserRole;
   iat?: number;
