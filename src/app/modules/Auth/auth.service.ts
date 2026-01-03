@@ -346,22 +346,34 @@ const loginUser = async (
     const accessToken = createToken(jwtPayload);
     const refreshToken = createToken(jwtPayload, { isRefresh: true });
 
-    await User.updateOne({ _id: user._id }, { lastLogin: new Date() });
+    // await User.updateOne({ _id: user._id }, { lastLogin: new Date() });
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          failedLoginAttempts: 0,
+          lastLogin: new Date(),
+        },
+      }
+    ).catch((err) => {
+      console.error("Failed to update last login:", err);
+      throw err;
+    });
 
     // Cache tokens
-    const prefix = config.redis_cache_key_prefix || "auth";
-    await Promise.all([
-      cacheData(
-        `${prefix}:user:${email}:accessToken`,
-        accessToken,
-        parseInt(config.redis_ttl_access_token as string) || 3600
-      ),
-      cacheData(
-        `${prefix}:user:${email}:refreshToken`,
-        refreshToken,
-        parseInt(config.redis_ttl_refresh_token as string) || 604800
-      ),
-    ]);
+    // const prefix = config.redis_cache_key_prefix || "auth";
+    // await Promise.all([
+    //   cacheData(
+    //     `${prefix}:user:${email}:accessToken`,
+    //     accessToken,
+    //     parseInt(config.redis_ttl_access_token as string) || 3600
+    //   ),
+    //   cacheData(
+    //     `${prefix}:user:${email}:refreshToken`,
+    //     refreshToken,
+    //     parseInt(config.redis_ttl_refresh_token as string) || 604800
+    //   ),
+    // ]);
 
     return {
       user,
